@@ -12,7 +12,3 @@ __pycache__/
 
 # Your local settings
 settings.json
-
-ffmpeg.exe
-ffplay.exe
-ffprobe.exe

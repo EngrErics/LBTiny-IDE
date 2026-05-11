@@ -416,6 +416,33 @@ class MainWindow(QMainWindow):
         self.setup_watch_grid()
         self.update_ui()
 
+        # Load Window Size and Splitter States
+        geometry = self.settings.value("geometry")
+        if geometry:
+            self.restoreGeometry(geometry)
+            
+        main_state = self.settings.value("main_splitter_state")
+        if main_state:
+            main_splitter.restoreState(main_state)
+            
+        right_state = self.settings.value("right_splitter_state")
+        if right_state:
+            right_splitter.restoreState(right_state)
+
+        # Store references for saving later
+        self.main_splitter = main_splitter
+        self.right_splitter = right_splitter
+
+    def closeEvent(self, event):
+        # Save Window Geometry
+        self.settings.setValue("geometry", self.saveGeometry())
+        
+        # Save Splitter Positions (Hex-encoded byte arrays)
+        self.settings.setValue("main_splitter_state", self.main_splitter.saveState())
+        self.settings.setValue("right_splitter_state", self.right_splitter.saveState())
+        
+        super().closeEvent(event)        
+
     # --- WATCH WINDOW LOGIC ---
     def do_add_watch(self):
         text = self.watch_input.text().strip()
