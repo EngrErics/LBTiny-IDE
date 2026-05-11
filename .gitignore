@@ -1,0 +1,18 @@
+# PyInstaller build folders
+build/
+dist/
+installer/
+third_party/
+logs/
+
+# Python bytecode and cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Your local settings
+settings.json
+
+ffmpeg.exe
+ffplay.exe
+ffprobe.exe
