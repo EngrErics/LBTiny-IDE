@@ -392,6 +392,31 @@ class MainWindow(QMainWindow):
             act.setShortcut(shortcut)
             act.triggered.connect(slot)
             file_menu.addAction(act)
+        
+        # --- SIMULATION MENU ---
+        sim_menu = self.menuBar().addMenu("&Simulation")
+        
+        # Define our 5-speed plan (Label, Interval in ms)
+        speeds = [
+            ("1.0 s/instr (Crawl)", 1000),
+            ("0.5 s/instr (Slow)", 500),
+            ("0.05 s/instr (Default)", 50),
+            ("0.01 s/instr (Fast)", 10),
+            ("0.001 s/instr (Ultra)", 1)
+        ]
+
+        self.speed_actions = []
+        for text, ms in speeds:
+            act = QAction(text, self, checkable=True)
+            # Use a lambda with a default argument to capture the current 'ms'
+            act.triggered.connect(lambda checked, m=ms, a=act: self.set_sim_speed(m, a))
+            sim_menu.addAction(act)
+            self.speed_actions.append(act)
+            
+            # Set the default checkmark on the 50ms option
+            if ms == 50:
+                act.setChecked(True)
+                self.current_interval = 50
 
         # --- CONTROLS TOOLBAR ---
         t = self.addToolBar("Controls")
@@ -432,6 +457,19 @@ class MainWindow(QMainWindow):
         # Store references for saving later
         self.main_splitter = main_splitter
         self.right_splitter = right_splitter
+
+    def set_sim_speed(self, ms, action):
+        # Update the checkmarks in the menu
+        for act in self.speed_actions:
+            act.setChecked(False)
+        action.setChecked(True)
+        
+        # Update the internal interval
+        self.current_interval = ms
+        
+        # If the timer is already running, restart it with the new speed immediately
+        if self.timer.isActive():
+            self.timer.start(self.current_interval)
 
     def closeEvent(self, event):
         # Save Window Geometry
@@ -489,7 +527,7 @@ class MainWindow(QMainWindow):
 
     # --- IDE CONTROLS ---
     def do_run(self):
-        self.timer.start(50)
+        self.timer.start(self.current_interval)
 
     def do_new(self):
         if self.editor.toPlainText().strip():
