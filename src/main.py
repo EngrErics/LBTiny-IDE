@@ -346,6 +346,9 @@ class MainWindow(QMainWindow):
             if ms == 50:
                 act.setChecked(True)
                 self.current_interval = 50
+
+        self.sample_menu = self.menuBar().addMenu("&Sample Code")
+        self.populate_sample_menu()
         
         # help menu
         help_menu = self.menuBar().addMenu("&Help")
@@ -392,6 +395,46 @@ class MainWindow(QMainWindow):
         self.editor.textChanged.connect(self.mark_stale)
 
         self.update_ui()
+
+    def populate_sample_menu(self):
+        self.sample_menu.clear()
+        samples_path = resource_path(os.path.join("resources", "samplecode"))
+        
+        try:
+            files = sorted(f for f in os.listdir(samples_path) if f.endswith('.asm'))
+            if not files:
+                act = QAction("No samples found", self)
+                act.setEnabled(False)
+                self.sample_menu.addAction(act)
+                return
+            for filename in files:
+                full_path = os.path.join(samples_path, filename)
+                act = QAction(filename, self)
+                act.triggered.connect(lambda checked, p=full_path: self.load_sample(p))
+                self.sample_menu.addAction(act)
+        except FileNotFoundError:
+            act = QAction("Sample folder not found", self)
+            act.setEnabled(False)
+            self.sample_menu.addAction(act)
+
+    def load_sample(self, path):
+        if self.editor.toPlainText().strip():
+            reply = QMessageBox.question(self, "Load Sample",
+                "This will replace your current code. Continue?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if reply == QMessageBox.No:
+                return
+        try:
+            with open(path, 'r') as f:
+                content = f.read()
+            self.editor.blockSignals(True)
+            self.editor.setPlainText(content)
+            self.editor.blockSignals(False)
+            self.current_file = None
+            self.setWindowTitle(f"BeachCore IDE - {os.path.basename(path)} (Sample)")
+            self.do_assemble()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Could not load sample: {e}")
 
     def mark_stale(self):
         """Called whenever the user types in the editor."""
