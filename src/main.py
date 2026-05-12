@@ -44,7 +44,6 @@ class LineNumberArea(QWidget):
         self.codeEditor.handle_gutter_click(event.position().toPoint())
 
 class CodeEditor(QPlainTextEdit):
-    # Custom signal to securely notify the MainWindow of a click
     breakpoint_toggled = Signal(int)
 
     def __init__(self):
@@ -57,16 +56,14 @@ class CodeEditor(QPlainTextEdit):
         self.updateLineNumberAreaWidth(0)
 
     def handle_gutter_click(self, pos):
-        # Native Qt translation: Which text block is at this Y coordinate?
+        # We still only care about the Y coordinate to find the line!
         cursor = self.cursorForPosition(QPoint(0, pos.y()))
         block = cursor.block()
         
-        # Verify the click didn't happen in the empty space below the file
         top = self.blockBoundingGeometry(block).translated(self.contentOffset()).top()
         bottom = top + self.blockBoundingRect(block).height()
         
         if top <= pos.y() <= bottom:
-            # Emit the line number (0-indexed)
             self.breakpoint_toggled.emit(block.blockNumber())
 
     def lineNumberAreaWidth(self):
@@ -75,8 +72,10 @@ class CodeEditor(QPlainTextEdit):
         while max_v >= 10:
             max_v /= 10
             digits += 1
-        # Padded slightly more to accommodate the red circle
-        space = 28 + self.fontMetrics().horizontalAdvance('9') * digits
+            
+        # INCREASED WIDTH: We need about 15-20 pixels on the left reserved specifically 
+        # for the red dot so it doesn't overlap the numbers.
+        space = 35 + self.fontMetrics().horizontalAdvance('9') * digits
         return space
 
     def updateLineNumberAreaWidth(self, _):
@@ -113,18 +112,23 @@ class CodeEditor(QPlainTextEdit):
                 
                 addr = addr_map.get(blockNumber)
                 has_bp = addr in breakpoints if addr is not None else False
+                line_height = self.fontMetrics().height()
 
                 if has_bp:
                     painter.setRenderHint(QPainter.Antialiasing)
-                    painter.setBrush(QColor(200, 40, 40)) # Breakpoint Red
+                    painter.setBrush(QColor(200, 40, 40)) 
                     painter.setPen(Qt.NoPen)
                     
-                    r = self.fontMetrics().height() - 4
-                    painter.drawEllipse(self.lineNumberArea.width() - r - 6, top + 2, r, r)
+                    # MOVED TO THE LEFT: 
+                    # r is the diameter. We draw it at X=5 so it anchors to the left edge.
+                    r = line_height - 4
+                    painter.drawEllipse(5, top + 2, r, r)
 
                 number = str(blockNumber + 1)
                 painter.setPen(QColor("#FFF") if has_bp else QColor("#888"))
-                painter.drawText(0, top, self.lineNumberArea.width() - 5, self.fontMetrics().height(),
+                
+                # Numbers are still right-aligned within the overall width of the gutter
+                painter.drawText(0, top, self.lineNumberArea.width() - 5, line_height,
                                  Qt.AlignRight, number)
 
             block = block.next()
