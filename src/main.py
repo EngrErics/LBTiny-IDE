@@ -643,17 +643,6 @@ class MainWindow(QMainWindow):
             self.mem_label.setStyleSheet(stale_style)
             self.mem_label.setText("Program Memory (STALE)" if self.is_stale else "Program Memory")
 
-        # --- SAFETY CHECK: Ensure widget exists before updating ---
-        #if hasattr(self, 'mem_widget_label'):
-        #    current_size = len(self.current_binary) if hasattr(self, 'current_binary') and self.current_binary else 0
-            
-        #    self.mem_widget_label.setText(f"Memory Usage: {current_size}/3072 bytes")
-        #    self.mem_progress_bar.setValue(current_size)
-
-        #    mem_label_color = "red" if current_size > 3072 else "green"
-        #    self.mem_widget_label.setStyleSheet(f"color: {mem_label_color}; font-weight: bold;")
-        # ---------------------------------------------------------
-
         # Visual indicator for memory usage
         current_size = len(self.current_binary) if hasattr(self, 'current_binary') and self.current_binary else 0
         self.mem_widget_label.setText(f"Memory Usage: {current_size}/3072 bytes")
@@ -680,16 +669,17 @@ class MainWindow(QMainWindow):
             self.reg_view.setItem(i, 1, QTableWidgetItem(str(v)))
 
         line = self.pc_map.get(self.cpu.pc)
-        if line is not None:
+        if line is not None and not self.is_stale:  # ← add the stale check
             sel = QTextEdit.ExtraSelection()
             if self.cpu.pc in self.breakpoints and not self.timer.isActive():
-                sel.format.setBackground(QColor(180, 150, 0)) # Arcana Gold
-                #sel.format.setBackground(QColor(150, 40, 40)) # Deep Red for distinction, i can't decide
+                sel.format.setBackground(QColor(180, 150, 0))
             else:
-                sel.format.setBackground(self.palette().highlight().color()) # Purple
+                sel.format.setBackground(self.palette().highlight().color())
             sel.format.setProperty(QTextFormat.FullWidthSelection, True)
             sel.cursor = QTextCursor(self.editor.document().findBlockByLineNumber(line))
             self.editor.setExtraSelections([sel])
+        else:
+            self.editor.setExtraSelections([])  # ← clear it when stale
 
         base = (self.cpu.pc >> 4) << 4
         v_headers = [f"{base+(r*16):03X}" for r in range(16)]
