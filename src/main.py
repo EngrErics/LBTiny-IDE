@@ -713,9 +713,16 @@ class InstructionSetDialog(QDialog):
         
         layout = QVBoxLayout(self)
         
+        #self.text_display = QTextEdit()
+        #self.text_display.setReadOnly(True)
+        #self.text_display.setFont(QFont("Monospace", 10))
+
         self.text_display = QTextEdit()
         self.text_display.setReadOnly(True)
-        self.text_display.setFont(QFont("Monospace", 10))
+        font = QFont("Courier New", 10)  # more reliable than "Monospace" on Windows
+        font.setStyleHint(QFont.Monospace)  # ← fallback hint if Courier New isn't found
+        font.setFixedPitch(True)           # ← forces fixed-pitch selection
+        self.text_display.setFont(font)
         
         # Load the text from the resources folder
         instr_path = resource_path(os.path.join("resources", "isr.txt"))
