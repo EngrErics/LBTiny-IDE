@@ -184,8 +184,9 @@ class MainWindow(QMainWindow):
         saved_watches = self.settings.value("watched_bases", [])
         self.watched_bases = [int(w) for w in saved_watches] if saved_watches else []
         
-        saved_bps = self.settings.value("breakpoints", [])
-        self.breakpoints = {int(b, 16) for b in saved_bps} if saved_bps else set()
+        #disable saving and loading breakpoints
+        #saved_bps = self.settings.value("breakpoints", [])
+        #self.breakpoints = {int(b, 16) for b in saved_bps} if saved_bps else set()
 
         self.timer = QTimer(); self.timer.timeout.connect(self.do_timer_step)
         self.init_ui()
@@ -378,7 +379,8 @@ class MainWindow(QMainWindow):
         self.settings.setValue("geometry", self.saveGeometry())
         self.settings.setValue("main_splitter_state", self.main_splitter.saveState())
         self.settings.setValue("right_splitter_state", self.right_splitter.saveState())
-        self.settings.setValue("breakpoints", [f"{b:03X}" for b in self.breakpoints])
+        #disable saving and loading breakpoints
+        #self.settings.setValue("breakpoints", [f"{b:03X}" for b in self.breakpoints])
         super().closeEvent(event)        
 
     # --- BREAKPOINT LOGIC ---
