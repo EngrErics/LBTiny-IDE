@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QPlainTextEdit,
                                QHBoxLayout, QWidget, QToolBar, QSplitter, 
                                QHeaderView, QMessageBox, QLabel, QTextEdit,
                                QFileDialog, QAbstractButton, QLineEdit, 
-                               QPushButton, QDialog, QSizePolicy)
+                               QPushButton, QDialog, QSizePolicy, QProgressBar)
 from core import CPU, Assembler
 
 def resource_path(relative_path):
@@ -68,6 +68,9 @@ class CodeEditor(QPlainTextEdit):
         self.updateRequest.connect(self.updateLineNumberArea)
         self.updateLineNumberAreaWidth(0)
 
+        # ADD THIS — force geometry immediately after widget is shown
+        self.updateGeometry()
+
     def handle_gutter_click(self, pos):
         # We still only care about the Y coordinate to find the line!
         cursor = self.cursorForPosition(QPoint(0, pos.y()))
@@ -78,17 +81,15 @@ class CodeEditor(QPlainTextEdit):
         
         if top <= pos.y() <= bottom:
             self.breakpoint_toggled.emit(block.blockNumber())
-
+    
     def lineNumberAreaWidth(self):
         digits = 1
         max_v = max(1, self.blockCount())
         while max_v >= 10:
             max_v /= 10
             digits += 1
-            
-        # INCREASED WIDTH: We need about 15-20 pixels on the left reserved specifically 
-        # for the red dot so it doesn't overlap the numbers.
-        space = 35 + self.fontMetrics().horizontalAdvance('9') * digits
+        # increase width between start of characters and line number gutter
+        space = 40 + self.fontMetrics().horizontalAdvance('9') * digits  # was 35
         return space
 
     def updateLineNumberAreaWidth(self, _):
@@ -105,21 +106,22 @@ class CodeEditor(QPlainTextEdit):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         cr = self.contentsRect()
-        self.lineNumberArea.setGeometry(QRect(cr.left(), cr.top(), self.lineNumberAreaWidth(), cr.height()))
+        w = self.lineNumberAreaWidth()
+        self.lineNumberArea.setGeometry(QRect(cr.left(), cr.top(), w, cr.height()))
+        self.setViewportMargins(w, 0, 0, 0) #without this, first letter gets cut
+
 
     def lineNumberAreaPaintEvent(self, event):
         painter = QPainter(self.lineNumberArea)
         painter.fillRect(event.rect(), QColor("#222"))
 
         main_win = self.window()
+        is_stale = getattr(main_win, "is_stale", True)
         breakpoints = getattr(main_win, "breakpoints", set())
         addr_map = getattr(main_win, "addr_map", {})
         pc_map = getattr(main_win, "pc_map", {})
         
-        # Figure out which line the CPU is currently executing
-        active_line = -1
-        if hasattr(main_win, "cpu"):
-            active_line = pc_map.get(main_win.cpu.pc, -1)
+        active_line = pc_map.get(main_win.cpu.pc, -1) if hasattr(main_win, "cpu") else -1
 
         block = self.firstVisibleBlock()
         blockNumber = block.blockNumber()
@@ -130,7 +132,8 @@ class CodeEditor(QPlainTextEdit):
             if block.isVisible() and bottom >= event.rect().top():
                 
                 addr = addr_map.get(blockNumber)
-                has_bp = addr in breakpoints if addr is not None else False
+                is_executable = addr is not None
+                has_bp = addr in breakpoints if is_executable else False
                 is_active = (blockNumber == active_line)
                 
                 line_height = self.fontMetrics().height()
@@ -139,22 +142,23 @@ class CodeEditor(QPlainTextEdit):
                 # --- 1. Draw Breakpoint Dot ---
                 if has_bp:
                     painter.setRenderHint(QPainter.Antialiasing)
-                    painter.setBrush(QColor(200, 40, 40)) 
+                    # If stale, we use a faded red (Ghost Breakpoint)
+                    bp_color = QColor(200, 40, 40, 100 if is_stale else 255)
+                    painter.setBrush(bp_color)
                     painter.setPen(Qt.NoPen)
                     painter.drawEllipse(5, top + 2, r, r)
 
                 # --- 2. Draw Execution Arrow ---
                 if is_active:
                     painter.setRenderHint(QPainter.Antialiasing)
-                    # VSCode Gold/Yellow for the current instruction
-                    pen = QPen(QColor(250, 200, 50)) 
+                    # If stale, the arrow turns gray to show it's untrusted
+                    arrow_color = QColor(150, 150, 150) if is_stale else QColor(250, 200, 50)
+                    pen = QPen(arrow_color)
                     pen.setWidth(2)
                     painter.setPen(pen)
-                    painter.setBrush(Qt.NoBrush) # Keep it hollow
+                    painter.setBrush(Qt.NoBrush)
                     
-                    # Create a right-pointing triangle
-                    arrow_x = 5
-                    arrow_y = top + 2
+                    arrow_x, arrow_y = 5, top + 2
                     poly = QPolygon([
                         QPoint(arrow_x + 1, arrow_y + 1),
                         QPoint(arrow_x + r - 3, arrow_y + r // 2),
@@ -163,10 +167,17 @@ class CodeEditor(QPlainTextEdit):
                     painter.drawPolygon(poly)
 
                 # --- 3. Draw Line Number ---
-                number = str(blockNumber + 1)
-                painter.setPen(QColor("#FFF") if has_bp else QColor("#888"))
-                painter.drawText(0, top, self.lineNumberArea.width() - 5, line_height,
-                                 Qt.AlignRight, number)
+                # Executable lines = Bright White/Gold
+                # Non-executable lines = Dark Gray
+                if is_executable:
+                    num_color = QColor("#FFF") if not is_stale else QColor("#AAA")
+                else:
+                    num_color = QColor("#444") # Very dim
+
+                painter.setPen(num_color)
+                #-10 pushes numbers to the left in the gutter
+                painter.drawText(0, top, self.lineNumberArea.width() - 10, line_height,
+                                 Qt.AlignRight, str(blockNumber + 1))
 
             block = block.next()
             top = bottom
@@ -178,7 +189,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.cpu, self.assembler, self.pc_map, self.addr_map = CPU(), Assembler(), {}, {}
         self.breakpoints = set()
-        self.current_file = None  
+        self.current_file = None
+        self.is_stale = True # Start stale so user MUST assemble first  
         
         self.settings = QSettings("BeachCore", "IDE")
         saved_watches = self.settings.value("watched_bases", [])
@@ -266,9 +278,33 @@ class MainWindow(QMainWindow):
         watch_layout.addWidget(self.watch_view)
         right_splitter.addWidget(watch_widget)
 
-        mem_widget = QWidget(); mem_layout = QVBoxLayout(mem_widget)
+        mem_widget = QWidget()
+        mem_layout = QVBoxLayout(mem_widget)
         mem_layout.setContentsMargins(0, 0, 0, 0)
-        mem_layout.addWidget(QLabel("<b>Program Memory</b>")); mem_layout.addWidget(self.mem_view)
+        
+        # Add the title and the main memory text area
+        mem_layout.addWidget(QLabel("<b>Program Memory</b>"))
+        mem_layout.addWidget(self.mem_view)
+        
+        # --- NEW: Memory Status Widgets ---
+        self.mem_widget_label = QLabel("Memory Usage: 0/3072 bytes")
+        
+        self.mem_progress_bar = QProgressBar()
+        self.mem_progress_bar.setTextVisible(False)
+        self.mem_progress_bar.setFixedHeight(10)
+        self.mem_progress_bar.setMaximum(3072) # 3KB limit
+
+        # Create a horizontal layout to hold the label and progress bar side-by-side
+        status_layout = QHBoxLayout()
+        status_layout.addWidget(self.mem_widget_label)   
+        #status_layout.addWidget(self.mem_progress_bar)
+        status_layout.addWidget(self.mem_progress_bar, 1)   
+        #status_layout.addStretch()
+
+        # Add this horizontal strip to the bottom of the vertical memory layout
+        mem_layout.addLayout(status_layout)
+        
+        # Finally, add the whole memory widget block to the right side of your app
         right_splitter.addWidget(mem_widget)
 
         right_splitter.setSizes([200, 300, 300])
@@ -342,7 +378,6 @@ class MainWindow(QMainWindow):
         t.addAction(QAction("INT Trigger", self, triggered=self.cpu.trigger_interrupt))
 
         self.setup_watch_grid()
-        self.update_ui()
 
         geometry = self.settings.value("geometry")
         if geometry: self.restoreGeometry(geometry)
@@ -353,6 +388,17 @@ class MainWindow(QMainWindow):
 
         self.main_splitter = main_splitter
         self.right_splitter = right_splitter
+
+        self.editor.textChanged.connect(self.mark_stale)
+
+        self.update_ui()
+
+    def mark_stale(self):
+        """Called whenever the user types in the editor."""
+        if not self.is_stale:
+            self.is_stale = True
+            self.statusBar().showMessage("Source changed - Assembly required", 0)
+            self.update_ui() # To refresh button states/colors
 
     def show_instructions(self):
         # Store the dialog as an attribute of MainWindow (self.instr_dialog)
@@ -385,17 +431,20 @@ class MainWindow(QMainWindow):
 
     # --- BREAKPOINT LOGIC ---
     def toggle_breakpoint(self, line_number):
-        if line_number in self.addr_map:
-            addr = self.addr_map[line_number]
+        # If the user clicks a comment, look ahead for the next instruction
+        target_line = line_number
+        while target_line < self.editor.blockCount() and target_line not in self.addr_map:
+            target_line += 1
+            
+        if target_line in self.addr_map:
+            addr = self.addr_map[target_line]
             if addr in self.breakpoints:
                 self.breakpoints.remove(addr)
-                self.statusBar().showMessage(f"Breakpoint removed from 0x{addr:03X}", 2000)
             else:
                 self.breakpoints.add(addr)
-                self.statusBar().showMessage(f"Breakpoint added at 0x{addr:03X}", 2000)
             self.editor.lineNumberArea.update()
         else:
-            self.statusBar().showMessage("Cannot set breakpoint: Line does not map to a memory address (Assemble first!)", 4000)
+            self.statusBar().showMessage("No executable code found from this line downward.", 3000)
 
     # --- WATCH WINDOW LOGIC ---
     def do_add_watch(self):
@@ -430,8 +479,12 @@ class MainWindow(QMainWindow):
         v_headers = [f"{b:03X}" for b in self.watched_bases]
         self.watch_view.setVerticalHeaderLabels(v_headers)
 
-    # --- IDE CONTROLS ---
     def do_run(self):
+        # Prevent running stale code
+        if self.is_stale:
+            self.do_assemble()
+            if self.is_stale: return # Stop if assembly failed
+            
         if self.cpu.pc in self.breakpoints:
             self.cpu.skip_breakpoint = True
         self.timer.start(self.current_interval)
@@ -440,20 +493,36 @@ class MainWindow(QMainWindow):
         if self.editor.toPlainText().strip():
             reply = QMessageBox.question(self, "Confirm New File", "You have changes in the editor. Are you sure you want to clear it?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
             if reply == QMessageBox.No: return
+        
+        self.editor.blockSignals(True)
         self.editor.clear()
+        self.editor.blockSignals(False)
+        
         self.current_file = None
         self.setWindowTitle("BeachCore IDE - New File")
         self.pc_map = {}; self.addr_map = {}
+        self.is_stale = True # Blank files need assembly
         self.update_ui()
 
     def do_open(self):
         path, _ = QFileDialog.getOpenFileName(self, "Open ASM File", "", "Assembly Files (*.asm);;All Files (*)")
         if path:
             try:
-                with open(path, 'r') as f: self.editor.setPlainText(f.read())
+                with open(path, 'r') as f: 
+                    file_content = f.read()
+                
+                # Block signals so loading text doesn't trigger "mark_stale"
+                self.editor.blockSignals(True)
+                self.editor.setPlainText(file_content)
+                self.editor.blockSignals(False)
+                
                 self.current_file = path
                 self.setWindowTitle(f"BeachCore IDE - {os.path.basename(path)}")
-            except Exception as e: QMessageBox.critical(self, "Error", f"Could not open file: {e}")
+                
+                # Auto-assemble the file you just opened!
+                self.do_assemble() 
+            except Exception as e: 
+                QMessageBox.critical(self, "Error", f"Could not open file: {e}")
 
     def do_save(self):
         if self.current_file:
@@ -473,11 +542,32 @@ class MainWindow(QMainWindow):
     def do_assemble(self):
         try:
             self.cpu.mem, self.pc_map, self.addr_map = self.assembler.assemble(self.editor.toPlainText())
-            self.cpu.pc = 0; self.update_ui()
-            self.statusBar().showMessage("Assembly Successful.", 3000)
-        except Exception as e: QMessageBox.critical(self, "Error", str(e))
+            
+            # --- FIX: Calculate binary size for the UI ---
+            # If your assembler outputs a raw bytearray, assign it here. 
+            # Otherwise, we estimate size based on the highest mapped address.
+            if self.addr_map:
+                max_address = max(self.addr_map.values())
+                self.current_binary = [0] * (max_address + 1) # Mock array for length checking
+            else:
+                self.current_binary = []
+            
+            # CLEAR STALE STATE
+            self.is_stale = False
+            self.statusBar().showMessage("Assembly Successful. CPU Ready.", 3000)
+            self.update_ui()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
 
     def do_timer_step(self):
+        # --- FIX: Stop the runaway train if user edits code mid-run ---
+        if self.is_stale:
+            self.timer.stop()
+            self.statusBar().showMessage("Simulation stopped: Code was edited during run.", 3000)
+            self.update_ui()
+            return
+        # --------------------------------------------------------------
+
         # This is strictly for the auto-run timer.
         if self.cpu.pc in self.breakpoints and not self.cpu.skip_breakpoint:
             self.timer.stop()
@@ -490,7 +580,11 @@ class MainWindow(QMainWindow):
         self.update_ui()
 
     def do_step(self):
-        # Manual step (F10) ALWAYS forces execution, ignoring breakpoints entirely
+        # Prevent stepping on stale code
+        if self.is_stale:
+            self.do_assemble()
+            if self.is_stale: return # Abort if assembly failed
+
         self.cpu.step()
         self.update_ui()
 
@@ -500,6 +594,37 @@ class MainWindow(QMainWindow):
         self.update_ui()
 
     def update_ui(self):
+        # Flash the "Program Memory" label if stale
+        stale_style = "color: #FFA500; font-weight: bold;" if self.is_stale else "color: white; font-weight: bold;"
+        if hasattr(self, 'mem_label'):
+            self.mem_label.setStyleSheet(stale_style)
+            self.mem_label.setText("Program Memory (STALE)" if self.is_stale else "Program Memory")
+
+        # --- SAFETY CHECK: Ensure widget exists before updating ---
+        #if hasattr(self, 'mem_widget_label'):
+        #    current_size = len(self.current_binary) if hasattr(self, 'current_binary') and self.current_binary else 0
+            
+        #    self.mem_widget_label.setText(f"Memory Usage: {current_size}/3072 bytes")
+        #    self.mem_progress_bar.setValue(current_size)
+
+        #    mem_label_color = "red" if current_size > 3072 else "green"
+        #    self.mem_widget_label.setStyleSheet(f"color: {mem_label_color}; font-weight: bold;")
+        # ---------------------------------------------------------
+
+        # Visual indicator for memory usage
+        current_size = len(self.current_binary) if hasattr(self, 'current_binary') and self.current_binary else 0
+        self.mem_widget_label.setText(f"Memory Usage: {current_size}/3072 bytes")
+        self.mem_progress_bar.setValue(current_size)
+
+        # Visual indicator for stale memory
+        if self.is_stale:
+            mem_label_color = "#FFA500"
+        elif current_size > 3072:
+            mem_label_color = "red"
+        else:
+            mem_label_color = "green"
+        self.mem_widget_label.setStyleSheet(f"color: {mem_label_color}; font-weight: bold;")
+
         regs = [
             ("PC", f"{self.cpu.pc:03X}"), ("ACC", f"{self.cpu.acc:02X}"),
             ("C", self.cpu.c), ("Z", self.cpu.z), ("IE", self.cpu.ie),
