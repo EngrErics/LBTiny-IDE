@@ -3,7 +3,7 @@ import os
 import PySide6
 from PySide6.QtCore import Qt, QTimer, QRect, QSize, QObject, QEvent, QSettings, Signal, QPoint
 from PySide6.QtGui import (QColor, QFont, QAction, QTextFormat, QTextCursor, 
-                           QPalette, QPainter)
+                           QPalette, QPainter, QPen, QPolygon)
 from PySide6.QtWidgets import (QApplication, QMainWindow, QPlainTextEdit, 
                                QTableWidget, QTableWidgetItem, QVBoxLayout, 
                                QHBoxLayout, QWidget, QToolBar, QSplitter, 
@@ -101,6 +101,12 @@ class CodeEditor(QPlainTextEdit):
         main_win = self.window()
         breakpoints = getattr(main_win, "breakpoints", set())
         addr_map = getattr(main_win, "addr_map", {})
+        pc_map = getattr(main_win, "pc_map", {})
+        
+        # Figure out which line the CPU is currently executing
+        active_line = -1
+        if hasattr(main_win, "cpu"):
+            active_line = pc_map.get(main_win.cpu.pc, -1)
 
         block = self.firstVisibleBlock()
         blockNumber = block.blockNumber()
@@ -112,22 +118,40 @@ class CodeEditor(QPlainTextEdit):
                 
                 addr = addr_map.get(blockNumber)
                 has_bp = addr in breakpoints if addr is not None else False
+                is_active = (blockNumber == active_line)
+                
                 line_height = self.fontMetrics().height()
+                r = line_height - 4
 
+                # --- 1. Draw Breakpoint Dot ---
                 if has_bp:
                     painter.setRenderHint(QPainter.Antialiasing)
                     painter.setBrush(QColor(200, 40, 40)) 
                     painter.setPen(Qt.NoPen)
-                    
-                    # MOVED TO THE LEFT: 
-                    # r is the diameter. We draw it at X=5 so it anchors to the left edge.
-                    r = line_height - 4
                     painter.drawEllipse(5, top + 2, r, r)
 
+                # --- 2. Draw Execution Arrow ---
+                if is_active:
+                    painter.setRenderHint(QPainter.Antialiasing)
+                    # VSCode Gold/Yellow for the current instruction
+                    pen = QPen(QColor(250, 200, 50)) 
+                    pen.setWidth(2)
+                    painter.setPen(pen)
+                    painter.setBrush(Qt.NoBrush) # Keep it hollow
+                    
+                    # Create a right-pointing triangle
+                    arrow_x = 5
+                    arrow_y = top + 2
+                    poly = QPolygon([
+                        QPoint(arrow_x + 1, arrow_y + 1),
+                        QPoint(arrow_x + r - 3, arrow_y + r // 2),
+                        QPoint(arrow_x + 1, arrow_y + r - 1)
+                    ])
+                    painter.drawPolygon(poly)
+
+                # --- 3. Draw Line Number ---
                 number = str(blockNumber + 1)
                 painter.setPen(QColor("#FFF") if has_bp else QColor("#888"))
-                
-                # Numbers are still right-aligned within the overall width of the gutter
                 painter.drawText(0, top, self.lineNumberArea.width() - 5, line_height,
                                  Qt.AlignRight, number)
 
@@ -443,6 +467,7 @@ class MainWindow(QMainWindow):
             sel = QTextEdit.ExtraSelection()
             if self.cpu.pc in self.breakpoints and not self.timer.isActive():
                 sel.format.setBackground(QColor(180, 150, 0)) # Arcana Gold
+                #sel.format.setBackground(QColor(150, 40, 40)) # Deep Red for distinction, i can't decide
             else:
                 sel.format.setBackground(self.palette().highlight().color()) # Purple
             sel.format.setProperty(QTextFormat.FullWidthSelection, True)
@@ -468,6 +493,9 @@ class MainWindow(QMainWindow):
                     if addr == self.cpu.pc: it.setBackground(self.palette().highlight().color())
                     self.watch_view.setItem(r, c, it)
 
+        # Forces the gutter to repaint the arrow at the new PC location
+        self.editor.lineNumberArea.update()
+
 if __name__ == "__main__":
     app = QApplication(sys.argv); app.setStyle("Fusion")
 
@@ -483,7 +511,8 @@ if __name__ == "__main__":
     arcana_palette.setColor(QPalette.ButtonText, QColor(252, 252, 252))
     arcana_palette.setColor(QPalette.BrightText, QColor(75, 75, 75))
     arcana_palette.setColor(QPalette.Link, QColor(209, 199, 242))
-    arcana_palette.setColor(QPalette.Highlight, QColor(110, 86, 169)) 
+    #arcana_palette.setColor(QPalette.Highlight, QColor(110, 86, 169)) # this is arcana purple
+    arcana_palette.setColor(QPalette.Highlight, QColor(180, 150, 0)) # Now Arcana Gold 
     arcana_palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
     app.setPalette(arcana_palette)
     
