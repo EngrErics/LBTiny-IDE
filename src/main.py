@@ -3,14 +3,27 @@ import os
 import PySide6
 from PySide6.QtCore import Qt, QTimer, QRect, QSize, QObject, QEvent, QSettings, Signal, QPoint
 from PySide6.QtGui import (QColor, QFont, QAction, QTextFormat, QTextCursor, 
-                           QPalette, QPainter, QPen, QPolygon)
+                           QPalette, QPainter, QPen, QPolygon, QIcon)
 from PySide6.QtWidgets import (QApplication, QMainWindow, QPlainTextEdit, 
                                QTableWidget, QTableWidgetItem, QVBoxLayout, 
                                QHBoxLayout, QWidget, QToolBar, QSplitter, 
                                QHeaderView, QMessageBox, QLabel, QTextEdit,
                                QFileDialog, QAbstractButton, QLineEdit, 
-                               QPushButton)
+                               QPushButton, QDialog, QSizePolicy)
 from core import CPU, Assembler
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        # Get the absolute path of the directory containing this script (the 'src' folder)
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        # Go up one level to the project root
+        base_path = os.path.abspath(os.path.join(script_dir, '..'))
+
+    return os.path.join(base_path, relative_path)
 
 # Corner Button Event Filter
 class CornerPainter(QObject):
@@ -179,6 +192,10 @@ class MainWindow(QMainWindow):
 
     def init_ui(self):
         self.setWindowTitle("BeachCore IDE"); self.resize(1200, 800)
+
+        # Safely set the window icon
+        icon_path = resource_path(os.path.join("resources", "icon.png"))
+        self.setWindowIcon(QIcon(icon_path))
         
         self.editor = CodeEditor()
         # Wire the new signal directly to the toggle function
@@ -261,6 +278,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(main_splitter)
         self.setCentralWidget(central)
 
+        # FILE MENU------------------------------------------
         file_menu = self.menuBar().addMenu("&File")
         file_actions = [
             ("New", "Ctrl+N", self.do_new),
@@ -291,7 +309,21 @@ class MainWindow(QMainWindow):
             if ms == 50:
                 act.setChecked(True)
                 self.current_interval = 50
+        
+        # help menu
+        help_menu = self.menuBar().addMenu("&Help")
 
+        # help -> ISR reference
+        instr_act = QAction("Instruction Set &Reference", self)
+        instr_act.triggered.connect(self.show_instructions)
+        help_menu.addAction(instr_act)
+
+        # help -> about
+        about_act = QAction("&About BeachCore", self)
+        about_act.triggered.connect(self.show_about)
+        help_menu.addAction(about_act)
+
+        # TOOLBAR--------------------------------------------
         t = self.addToolBar("Controls")
         control_actions = [
             ("Assemble (F7)", "F7", self.do_assemble),
@@ -320,6 +352,21 @@ class MainWindow(QMainWindow):
 
         self.main_splitter = main_splitter
         self.right_splitter = right_splitter
+
+    def show_instructions(self):
+        # Store the dialog as an attribute of MainWindow (self.instr_dialog)
+        # This keeps it alive in memory while you interact with the editor.
+        if not hasattr(self, 'instr_dialog') or self.instr_dialog is None:
+            self.instr_dialog = InstructionSetDialog(self)
+        
+        # Modeless windows use .show() instead of .exec()
+        self.instr_dialog.show()
+        self.instr_dialog.raise_() # Bring to front if already open
+        self.instr_dialog.activateWindow()
+
+    def show_about(self):
+        dialog = AboutDialog(self)
+        dialog.exec()
 
     def set_sim_speed(self, ms, action):
         for act in self.speed_actions: act.setChecked(False)
@@ -495,6 +542,79 @@ class MainWindow(QMainWindow):
 
         # Forces the gutter to repaint the arrow at the new PC location
         self.editor.lineNumberArea.update()
+
+class InstructionSetDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # This flag keeps the window floating on top of the main IDE
+        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+        self.setWindowTitle("Instruction Set Reference")
+        self.resize(600, 700)
+        
+        layout = QVBoxLayout(self)
+        
+        self.text_display = QTextEdit()
+        self.text_display.setReadOnly(True)
+        self.text_display.setFont(QFont("Monospace", 10))
+        
+        # Load the text from the resources folder
+        instr_path = resource_path(os.path.join("resources", "isr.txt"))
+        try:
+            with open(instr_path, 'r') as f:
+                self.text_display.setPlainText(f.read())
+        except Exception as e:
+            self.text_display.setPlainText(f"Error loading instructions: {e}")
+            
+        layout.addWidget(self.text_display)
+        
+        btn_close = QPushButton("Close")
+        btn_close.clicked.connect(self.accept)
+        layout.addWidget(btn_close, alignment=Qt.AlignRight)
+
+class AboutDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("About BeachCore")
+        self.setFixedSize(400, 350)
+        
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+        layout.setContentsMargins(30, 30, 30, 30)
+
+        # 1. The Icon (Prominent)
+        icon_label = QLabel()
+        icon_path = resource_path(os.path.join("resources", "icon.png"))
+        pixmap = QIcon(icon_path).pixmap(128, 128) # Large 128x128 display
+        icon_label.setPixmap(pixmap)
+        icon_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(icon_label)
+
+        # 2. The Text
+        title = QLabel("Project BeachCore")
+        title.setStyleSheet("font-size: 18pt; font-weight: bold; color: #B49600;") # Arcana Gold
+        title.setAlignment(Qt.AlignCenter)
+        
+        subtitle = QLabel("Minimalistic 8-bit CPU")
+        subtitle.setStyleSheet("font-size: 12pt; margin-bottom: 10px;")
+        subtitle.setAlignment(Qt.AlignCenter)
+
+        credits = QLabel(
+            "By: William Dessert & Sarah Gooneratne\n"
+            "Advisor: Eric Hernandez"
+        )
+        credits.setAlignment(Qt.AlignCenter)
+        credits.setStyleSheet("color: #AAA; line-height: 150%;")
+
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
+        layout.addStretch() # Space between title and credits
+        layout.addWidget(credits)
+        layout.addStretch()
+
+        # 3. Close Button
+        btn_close = QPushButton("Close")
+        btn_close.clicked.connect(self.accept)
+        layout.addWidget(btn_close, alignment=Qt.AlignCenter)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv); app.setStyle("Fusion")
