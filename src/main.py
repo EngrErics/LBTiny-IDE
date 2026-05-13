@@ -12,6 +12,8 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QPlainTextEdit,
                                QPushButton, QDialog, QSizePolicy, QProgressBar)
 from core import CPU, Assembler
 
+from stm32_crc import self_test
+
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
     try:
@@ -802,6 +804,8 @@ if __name__ == "__main__":
     arcana_palette.setColor(QPalette.Highlight, QColor(180, 150, 0)) # Now Arcana Gold 
     arcana_palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
     app.setPalette(arcana_palette)
+
+    self_test()
     
     win = MainWindow()
     win.show()
