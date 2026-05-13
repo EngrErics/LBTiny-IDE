@@ -586,19 +586,19 @@ class MainWindow(QMainWindow):
         try:
             self.cpu.mem, self.pc_map, self.addr_map = self.assembler.assemble(self.editor.toPlainText())
             
-            # --- FIX: Calculate binary size for the UI ---
-            # If your assembler outputs a raw bytearray, assign it here. 
-            # Otherwise, we estimate size based on the highest mapped address.
             if self.addr_map:
                 max_address = max(self.addr_map.values())
                 self.current_binary = [0] * (max_address + 1) # Mock array for length checking
             else:
                 self.current_binary = []
             
-            # CLEAR STALE STATE
+            # Clear Stale State
+            self.cpu.reset()
+            self.breakpoints.clear()
             self.is_stale = False
             self.statusBar().showMessage("Assembly Successful. CPU Ready.", 3000)
             self.update_ui()
+
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
 
@@ -807,3 +807,7 @@ if __name__ == "__main__":
     win.show()
     
     sys.exit(app.exec())
+
+
+#always put the executing line back at the beginning when changing code 
+#add search in code editor wth shortcut ctrl-f
