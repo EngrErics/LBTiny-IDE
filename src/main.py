@@ -804,8 +804,6 @@ if __name__ == "__main__":
     arcana_palette.setColor(QPalette.Highlight, QColor(180, 150, 0)) # Now Arcana Gold 
     arcana_palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
     app.setPalette(arcana_palette)
-
-    self_test()
     
     win = MainWindow()
     win.show()

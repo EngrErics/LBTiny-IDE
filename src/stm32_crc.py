@@ -99,26 +99,24 @@ def self_test():
     print(f"  PASS")
 
     # -------------------------------------------------------------------
-    # CROSS-CHECK VECTORS: computed here, to be confirmed against
-    # the Nucleo in Step 2. Once confirmed, promote these to assertions.
+    # CONFIRMED VECTORS: matched against STM32F4 hardware on
+    # Nucleo-F446RE in Step 2. These are now ground truth.
     # -------------------------------------------------------------------
-    print("\n[TO BE CONFIRMED AGAINST NUCLEO IN STEP 2]")
-
-    cross_check_vectors = [
-        ("all-ones word",       bytes([0xFF, 0xFF, 0xFF, 0xFF])),
-        ("0xDEADBEEF (LE)",     bytes([0xEF, 0xBE, 0xAD, 0xDE])),
-        ("'ABCD'",              b"ABCD"),
-        ("'12345678'",          b"12345678"),
-        ("empty (-> 0xFFx4 pad)", b""),
-        ("single byte 0x00",    bytes([0x00])),  # exercises padding
-        ("3 bytes 'ABC'",       b"ABC"),         # exercises padding
+    print("\n[CONFIRMED] Vectors verified against STM32F4 hardware")
+    confirmed_vectors = [
+        ("all-ones word",            bytes([0xFF, 0xFF, 0xFF, 0xFF]),     0x00000000),
+        ("0xDEADBEEF (LE)",          bytes([0xEF, 0xBE, 0xAD, 0xDE]),     0x81DA1A18),
+        ("'ABCD'",                   b"ABCD",                              0xCF534AE1),
+        ("'12345678'",               b"12345678",                          0xFEFC54F9),
+        ("empty (-> 0xFFx4 pad)",    b"",                                  0xFFFFFFFF),
+        ("single byte 0x00",         bytes([0x00]),                        0xB1F740B4),
+        ("3 bytes 'ABC'",            b"ABC",                               0xEDD536CA),
     ]
-
-    for label, payload in cross_check_vectors:
+    for label, payload, expected in confirmed_vectors:
         crc = stm32_crc32(payload)
-        print(f"  {label:25s}  len={len(payload):3d}  "
-              f"padded={padded_length(payload):3d}  "
-              f"CRC=0x{crc:08X}")
+        status = "PASS" if crc == expected else "FAIL"
+        print(f"  {label:25s}  CRC=0x{crc:08X}  expected=0x{expected:08X}  {status}")
+        assert crc == expected, f"Confirmed vector '{label}' broke!"
 
     # -------------------------------------------------------------------
     # Sanity check: same input padded manually vs. auto-padded should match.
@@ -154,4 +152,4 @@ def self_test():
 
 
 if __name__ == "__main__":
-    _self_test()
+    self_test()
