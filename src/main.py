@@ -192,7 +192,7 @@ class MainWindow(QMainWindow):
         self.current_file = None
         self.is_stale = True # Start stale so user MUST assemble first  
         
-        self.settings = QSettings("BeachCore", "IDE")
+        self.settings = QSettings("LBTiny-IDE")
         saved_watches = self.settings.value("watched_bases", [])
         self.watched_bases = [int(w) for w in saved_watches] if saved_watches else []
         
@@ -204,7 +204,7 @@ class MainWindow(QMainWindow):
         self.init_ui()
 
     def init_ui(self):
-        self.setWindowTitle("BeachCore IDE"); self.resize(1200, 800)
+        self.setWindowTitle("LBTiny-IDE"); self.resize(1200, 800)
 
         # Safely set the window icon
         icon_path = resource_path(os.path.join("resources", "icon.png"))
@@ -359,7 +359,7 @@ class MainWindow(QMainWindow):
         help_menu.addAction(instr_act)
 
         # help -> about
-        about_act = QAction("&About BeachCore", self)
+        about_act = QAction("&About LBTiny-IDE", self)
         about_act.triggered.connect(self.show_about)
         help_menu.addAction(about_act)
 
@@ -431,7 +431,7 @@ class MainWindow(QMainWindow):
             self.editor.setPlainText(content)
             self.editor.blockSignals(False)
             self.current_file = None
-            self.setWindowTitle(f"BeachCore IDE - {os.path.basename(path)} (Sample)")
+            self.setWindowTitle(f"LBTiny-IDE - {os.path.basename(path)} (Sample)")
             self.do_assemble()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Could not load sample: {e}")
@@ -542,7 +542,7 @@ class MainWindow(QMainWindow):
         self.editor.blockSignals(False)
         
         self.current_file = None
-        self.setWindowTitle("BeachCore IDE - New File")
+        self.setWindowTitle("LBTiny-IDE - New File")
         self.pc_map = {}; self.addr_map = {}
         self.is_stale = True # Blank files need assembly
         self.update_ui()
@@ -560,7 +560,7 @@ class MainWindow(QMainWindow):
                 self.editor.blockSignals(False)
                 
                 self.current_file = path
-                self.setWindowTitle(f"BeachCore IDE - {os.path.basename(path)}")
+                self.setWindowTitle(f"LBTiny-IDE - {os.path.basename(path)}")
                 
                 # Auto-assemble the file you just opened!
                 self.do_assemble() 
@@ -580,7 +580,7 @@ class MainWindow(QMainWindow):
             if not path.endswith('.asm'): path += '.asm'
             self.current_file = path
             self.do_save()
-            self.setWindowTitle(f"BeachCore IDE - {os.path.basename(path)}")
+            self.setWindowTitle(f"LBTiny-IDE - {os.path.basename(path)}")
 
     def do_assemble(self):
         try:
@@ -741,7 +741,7 @@ class InstructionSetDialog(QDialog):
 class AboutDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("About BeachCore")
+        self.setWindowTitle("About LBTiny-IDE")
         self.setFixedSize(400, 350)
         
         layout = QVBoxLayout(self)
@@ -757,11 +757,11 @@ class AboutDialog(QDialog):
         layout.addWidget(icon_label)
 
         # 2. The Text
-        title = QLabel("Project BeachCore")
+        title = QLabel("Project LBTiny-IDE")
         title.setStyleSheet("font-size: 18pt; font-weight: bold; color: #B49600;") # Arcana Gold
         title.setAlignment(Qt.AlignCenter)
         
-        subtitle = QLabel("Minimalistic 8-bit CPU")
+        subtitle = QLabel("Minimalistic 8-bit CPU - Designed at CSULB")
         subtitle.setStyleSheet("font-size: 12pt; margin-bottom: 10px;")
         subtitle.setAlignment(Qt.AlignCenter)
 

@@ -1,4 +1,4 @@
-BeachCore 8-bit Instruction Set Reference
+LBTiny 8-bit Instruction Set Reference
 =========================================
 
 Legend:
