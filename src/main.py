@@ -11,8 +11,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QPlainTextEdit,
                                QFileDialog, QAbstractButton, QLineEdit, 
                                QPushButton, QDialog, QSizePolicy, QProgressBar)
 from core import CPU, Assembler
-
-from stm32_crc import self_test
+from hw_transfer import HwTransferDialog
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -382,6 +381,13 @@ class MainWindow(QMainWindow):
         
         t.addAction(QAction("INT Trigger", self, triggered=self.cpu.trigger_interrupt))
 
+        # Hardware group - separated from simulation controls
+        t.addSeparator()
+        download_act = QAction("Download…", self)
+        download_act.setToolTip("Download to LBTiny hardware (debug dialog)")
+        download_act.triggered.connect(self.show_download_dialog)
+        t.addAction(download_act)
+
         self.setup_watch_grid()
 
         geometry = self.settings.value("geometry")
@@ -397,6 +403,13 @@ class MainWindow(QMainWindow):
         self.editor.textChanged.connect(self.mark_stale)
 
         self.update_ui()
+
+    def show_download_dialog(self):
+        """Open the hardware transfer / debug dialog."""
+        dlg = HwTransferDialog(self)
+        # Populate the binary-info section from whatever is currently assembled
+        dlg._recompute_local_crc()
+        dlg.show()  # non-modal so user can keep working in the IDE
 
     def populate_sample_menu(self):
         self.sample_menu.clear()
