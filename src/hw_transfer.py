@@ -137,6 +137,55 @@ class TransferWorker(QObject):
         self._port = None
         self.connection_changed.emit(False, "disconnected")
 
+    # -- read helpers (robust against Windows USB-CDC short reads) ----------
+    def _read_exact(self, n: int) -> bytes:
+        """
+        Read exactly n bytes within RESPONSE_READ_TIMEOUT_S total, retrying
+        across short reads. PySerial on Windows sometimes returns fewer
+        bytes than requested even when more are available shortly after.
+        """
+        if n <= 0:
+            return b""
+        deadline = time.time() + RESPONSE_READ_TIMEOUT_S
+        buf = bytearray()
+        while len(buf) < n:
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                break
+            self._port.timeout = min(0.5, remaining)
+            chunk = self._port.read(n - len(buf))
+            if chunk:
+                buf.extend(chunk)
+            # else: timeout slice elapsed, loop and try again until deadline
+        return bytes(buf)
+
+    def _read_response_header(self):
+        """
+        Find the response sync byte 0x5A, then read the rest of the
+        7-byte fixed header. Returns (header_bytes_or_None, dropped_count).
+
+        We scan for sync to recover from stale bytes left in the OS buffer
+        from a previous failed transfer, and from short reads where bytes
+        arrive in pieces split across the sync boundary.
+        """
+        deadline = time.time() + RESPONSE_READ_TIMEOUT_S
+        dropped = 0
+        # Scan byte-by-byte until we see 0x5A or hit deadline
+        while time.time() < deadline:
+            self._port.timeout = 0.25
+            b = self._port.read(1)
+            if not b:
+                continue
+            if b[0] == SYNC_NUCLEO_TO_HOST:
+                # Found sync. Read the remaining 6 bytes of the fixed header.
+                rest = self._read_exact(RESPONSE_FIXED_HEADER - 1)
+                if len(rest) != RESPONSE_FIXED_HEADER - 1:
+                    # Truncated - return what we got so caller can report
+                    return (bytes([b[0]]) + rest, dropped)
+                return (bytes([b[0]]) + rest, dropped)
+            dropped += 1
+        return (None, dropped)
+
     # -- transfer execution -------------------------------------------------
     @Slot(str, bytes)
     def do_transfer(self, label: str, payload: bytes):
@@ -190,18 +239,30 @@ class TransferWorker(QObject):
             ))
             return
 
-        # Read fixed header first to learn data_len
-        self._port.timeout = RESPONSE_READ_TIMEOUT_S
-        try:
-            head = self._port.read(RESPONSE_FIXED_HEADER)
-        except serial.SerialException as e:
-            self.log.emit("error", f"read failed: {e}")
+        # Small settle delay - on Windows the USB CDC driver may still be
+        # transmitting bytes when port.write() returns. Reading too early
+        # races the wire and produces phantom timeouts.
+        time.sleep(0.05)
+
+        # Robust response read: scan for sync byte, then read header+data.
+        # Windows USB CDC drivers can return short reads or leak stale bytes
+        # from previous transfers, so we don't trust the first byte to be sync.
+        head, sync_search_dropped = self._read_response_header()
+
+        if sync_search_dropped:
+            self.log.emit("info",
+                f"skipped {sync_search_dropped} non-sync bytes while "
+                f"searching for response start")
+
+        if head is None:
+            self.log.emit("error",
+                "response header timed out (no 0x5A sync byte received)")
             self.transfer_complete.emit(TransferResult(
                 ok=False, label=label, declared_len=declared_len,
                 local_crc=local_crc, nucleo_recv_len=None, nucleo_crc=None,
                 nucleo_status=None, elapsed_s=time.time() - t_start,
                 sent_bytes=frame, received_bytes=b"",
-                error_message=f"read failed: {e}",
+                error_message="no response sync byte received within timeout",
             ))
             return
 
@@ -220,20 +281,23 @@ class TransferWorker(QObject):
 
         sync, cmd, status, data_len = struct.unpack("<BBBI", head)
 
-        if sync != SYNC_NUCLEO_TO_HOST:
+        # By construction sync == SYNC_NUCLEO_TO_HOST (we scanned for it).
+        # Sanity guard the data_len so a corrupt header can't make us
+        # read forever.
+        if data_len > 1024:
             self.log.emit("error",
-                f"bad response sync 0x{sync:02X} (expected 0x{SYNC_NUCLEO_TO_HOST:02X})")
+                f"response data_len suspiciously large: {data_len}")
             self.transfer_complete.emit(TransferResult(
                 ok=False, label=label, declared_len=declared_len,
                 local_crc=local_crc, nucleo_recv_len=None, nucleo_crc=None,
                 nucleo_status=status, elapsed_s=time.time() - t_start,
                 sent_bytes=frame, received_bytes=head,
-                error_message=f"bad response sync 0x{sync:02X}",
+                error_message=f"response data_len out of range ({data_len})",
             ))
             return
 
-        # Read variable-length data
-        data = self._port.read(data_len) if data_len else b""
+        # Read variable-length data with retry-until-complete
+        data = self._read_exact(data_len) if data_len else b""
         t_end = time.time()
         full_response = head + data
 
