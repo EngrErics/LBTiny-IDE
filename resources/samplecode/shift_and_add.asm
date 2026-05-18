@@ -20,37 +20,37 @@
 
 INIT:
     LDI 0x0E
-    ST  0x100           	; A = 14
+    ST  0x100	; A = 14
     LDI 0x12
-    ST  0x101           	; B = 18
-    LDI 0x07
-    ST  0x102           	; counter = 7
+    ST  0x101	; B = 18
+    LDI 0x08
+    ST  0x102	; counter = 8
     LDI 0x00
-    ST   0x103          	; product = 0
+    ST   0x103	; product = 0
 
 LOOP:
-    LD  0x102           	; Check the counter
-    JZ  DONE           	 ; Counter reached zero - done
+    LD  0x102	; Check the counter
+    JZ  DONE	; Counter reached zero - done
 
-    LD  0x101           	; Check LSB of B
+    LD  0x101	; Check LSB of B
     ANDI 0x01
-    JZ SHIFT       	;Skip add if the LSB is 0
+    JZ SHIFT	; Skip add if the LSB is 0
 
-    LD  0x103           	;product = A + product
+    LD  0x103	;product = A + product
     ADD 0x100
     ST  0x103
 
     JMP SHIFT
 
 SHIFT:
-     LD 0x100 	;Shift A left by 1 bit
+     LD 0x100	; Shift A left by 1 bit
      SHL
      ST 0x100
-     LD 0x101 	;Shift B right by 1 bit
+     LD 0x101	; Shift B right by 1 bit
      SHR
      ST 0x101
 
-     LD 0x102           	;Decrement counter
+     LD 0x102	;Decrement counter
      ADDI 0xFF
      ST 0x102
      JMP LOOP
