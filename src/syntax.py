@@ -35,7 +35,7 @@ class AsmHighlighter(QtGui.QSyntaxHighlighter):
     keywords = [
         'NOP', 'SHR', 'SHL', 'EI', 'DI', 'RETI', 'HALT', 'INV',
         'LDI', 'ADDI', 'ANDI', 'ORI', 'XORI', 'LD', 'ST', 'ADD', 'AND', 'OR', 'XOR', 
-        'JMP', 'JZ', 'JNZ', 'JC', 'JNC'
+        'JMP', 'JZ', 'JNZ', 'JC', 'JNC',
     ]
 
     def __init__(self, parent: QtGui.QTextDocument) -> None:
@@ -43,7 +43,8 @@ class AsmHighlighter(QtGui.QSyntaxHighlighter):
         rules = []
 
         # Keyword rules
-        rules += [(r'\b%s\b' % w, 0, STYLES['keyword']) for w in AsmHighlighter.keywords]
+        rules += [(r'(?i)\b%s\b' % w, 0, STYLES['keyword']) for w in AsmHighlighter.keywords]
+        
         # All other rules
         rules += [
  
