@@ -35,7 +35,7 @@ class AsmHighlighter(QtGui.QSyntaxHighlighter):
     keywords = [
         'NOP', 'SHR', 'SHL', 'EI', 'DI', 'RETI', 'HALT', 'INV',
         'LDI', 'ADDI', 'ANDI', 'ORI', 'XORI', 'LD', 'ST', 'ADD', 'AND', 'OR', 'XOR', 
-        'JMP', 'JZ', 'JNZ', 'JC', 'JNC'
+        'JMP', 'JZ', 'JNZ', 'JC', 'JNC',
     ]
 
     def __init__(self, parent: QtGui.QTextDocument) -> None:
