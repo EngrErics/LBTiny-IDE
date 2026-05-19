@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QPlainTextEdit,
                                QPushButton, QDialog, QSizePolicy, QProgressBar)
 from core import CPU, Assembler
 from hw_transfer import HwTransferDialog
+from syntax import *
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -62,7 +63,13 @@ class CodeEditor(QPlainTextEdit):
 
     def __init__(self):
         super().__init__()
-        self.setFont(QFont("Monospace", 11))
+
+        win_font = QFont("Courier New", 11)  # more reliable than "Monospace" on Windows
+        win_font.setStyleHint(QFont.Monospace)  # ← fallback hint if Courier New isn't found
+        win_font.setFixedPitch(True)           # ← forces fixed-pitch selection
+        self.setFont(QFont("Monospace", 11)) # Default "Monospace" unless in windows
+        if os.name == 'nt':
+            self.setFont(win_font)
         self.lineNumberArea = LineNumberArea(self)
 
         self.blockCountChanged.connect(self.updateLineNumberAreaWidth)
@@ -819,6 +826,7 @@ if __name__ == "__main__":
     app.setPalette(arcana_palette)
     
     win = MainWindow()
+    highlight = AsmHighlighter(win.editor.document())
     win.show()
     
     sys.exit(app.exec())
