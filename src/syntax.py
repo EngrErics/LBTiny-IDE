@@ -1,6 +1,4 @@
 from PySide6 import QtCore, QtGui, QtWidgets
-import sys
-
 
 # Much of this code was pulled from the PyQt wiki page
 # https://wiki.python.org/moin/PyQt/Python%20syntax%20highlighting
